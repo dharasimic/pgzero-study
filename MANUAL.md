@@ -110,7 +110,7 @@ Na primeira entrega, a geracao de salas pode ser feita a partir de um conjunto p
 
 ### 7.1 Baus comuns
 
-- Um bau comum fica fechado ate o jogador encostar nele.
+- Um bau comum fica fechado ate o jogador se aproximar e apertar `F` nele.
 - Ao ser aberto, ele revela um frasco.
 - Cada bau comum so pode ser aberto uma vez.
 - O jogador coleta o frasco ao encostar nele.
