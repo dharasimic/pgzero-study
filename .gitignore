@@ -203,6 +203,8 @@ cython_debug/
 
 # Local agent configuration
 agents/
+!.github/agents/
+!.github/agents/*.agent.md
 
 # Temporary file for partial code execution
 tempCodeRunnerFile.py

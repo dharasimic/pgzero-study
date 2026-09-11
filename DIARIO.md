@@ -14,3 +14,11 @@
 - Configurei constantes de cores, dimensões de janela e inicializacao de sons (click do menu).
 - Criado estrutura para subsuperfícies e transformações de escala dos elementos de interface.
 - Próxima etapa: implementar os estados do menu e input do teclado/mouse.
+
+# 11/09/2026
+
+- Tive problemas no momento de recortar os assets para usá-los no jogo. Acabei descobrindo um programa chamado LibreSprite, que facilitou muito visualizar os sprites animados e organizar meus assets.
+- Apanhei para fazer as colisões das paredes.
+- Criei a sala com tiles de chão e paredes a partir dos atlases de assets.
+- Implementei a movimentação do wizard com WASD, incluindo animações de parado e de corrida.
+- Adicionei colisões para impedir que o personagem atravesse as paredes.
