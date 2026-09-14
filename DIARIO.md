@@ -22,3 +22,12 @@
 - Criei a sala com tiles de chão e paredes a partir dos atlases de assets.
 - Implementei a movimentação do wizard com WASD, incluindo animações de parado e de corrida.
 - Adicionei colisões para impedir que o personagem atravesse as paredes.
+
+# 14?09?2026
+
+- Depois de uma pausa no final de semana voltei a atuar no jogo
+- Implementei os projeteis da bruxinha (a protagonista do jogo)
+- Implementei também o primeiro inimigo do jogo, o ogro grande
+- Apanhei demais com as identações do arquivo, acabei bagunçando sem querer e virou um efeito dominó onde cada vez que eu arrumava outra coisa ficava com a identação errada mas serviu pra eu aprender algumas lições sobre identação no pyhton rs
+- Implementei sistema de vida, morte de inimigos, contador de ogros mortos, timer do jogo e tela de pausa e de game over
+- Dei uma pausa no dia com um bug que eu não sei ainda como resolver, de tempos em tempos os projeteis passam direto pelos orgros e eu ainda não sei o motivo.
