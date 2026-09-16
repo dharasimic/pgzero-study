@@ -2,12 +2,14 @@ import re
 import random
 from pathlib import Path
 
+from pgzero import music
 import pygame
 
 WIDTH = 800
 HEIGHT = 600
 
 BACKGROUND_COLOR = (35, 45, 42)
+GAME_BACKGROUND_COLOR = (5, 5, 8)
 TEXT_COLOR = (226, 190, 132)
 HOVER_COLOR = (247, 218, 166)
 OUTLINE_COLOR = (61, 39, 27)
@@ -16,6 +18,17 @@ ui_atlas = pygame.image.load("images/MediavelUI.png").convert_alpha()
 books_atlas = pygame.image.load("images/UI books & more.png").convert_alpha()
 floor_atlas = pygame.image.load("images/atlas_floor-16x16.png").convert_alpha()
 walls_atlas = pygame.image.load("images/atlas_walls_low-16x16.png").convert_alpha()
+game_over_background = pygame.image.load("images/background.jpg").convert()
+game_over_background = pygame.transform.scale(
+    game_over_background,
+    (1063, 600),
+)
+
+game_over_background = game_over_background.subsurface(
+    pygame.Rect(131, 0, WIDTH, HEIGHT)
+)
+game_over_overlay = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
+game_over_overlay.fill((0, 0, 0, 150))
 click_sound = pygame.mixer.Sound("sounds/SFX/sfx_pressure_key_tp.mp3")
 panel_source = ui_atlas.subsurface((0, 0, 80, 96))
 panel = pygame.transform.scale(panel_source, (400, 480))
@@ -52,7 +65,7 @@ arrow_frames = tuple(
 
 panel_position = (
     (WIDTH - panel.get_width()) // 2,
-    (HEIGHT - panel.get_height()) // 2,
+    100,
 )
 panel_inner = pygame.Rect(13, 31, 54, 53)
 panel_scale_x = panel.get_width() / panel_source.get_width()
@@ -108,6 +121,17 @@ previous_state = "menu"
 controls_fade = 1.0
 x_button_pressed = 0
 music_muted = False
+MENU_MUSIC = "mystery"
+GAME_MUSIC_1 = "haunted"
+GAME_MUSIC_2 = "eglise_orgue"
+GAME_OVER_MUSIC = "cave_tuto"
+
+
+def play_game_music():
+    music.play(GAME_MUSIC_1)
+    music.queue(GAME_MUSIC_2)
+
+
 GAME_OVER_TEXT = "VOCE MORREU!"
 PULSE_FRAMES = (0, 1, 2, 3, 2, 1)
 
@@ -144,10 +168,21 @@ room_rect = pygame.Rect(
     ROOM_COLUMNS * ROOM_TILE_SIZE,
     ROOM_ROWS * ROOM_TILE_SIZE,
 )
-floor_tile = pygame.transform.scale(
-    floor_atlas.subsurface((0, 0, 16, 16)),
-    (ROOM_TILE_SIZE, ROOM_TILE_SIZE),
+floor_tiles = tuple(
+    pygame.transform.scale(
+        pygame.image.load(f"images/frames/floor_{number}.png").convert_alpha(),
+        (ROOM_TILE_SIZE, ROOM_TILE_SIZE),
+    )
+    for number in range(1, 9)
 )
+
+floor_layout = [
+    [
+        0 if random.random() < 0.90 else random.randint(1, 7)
+        for column in range(ROOM_COLUMNS)
+    ]
+    for row in range(ROOM_ROWS)
+]
 wall_vertical = pygame.transform.scale(
     walls_atlas.subsurface((0, 16, 16, 16)),
     (ROOM_TILE_SIZE, ROOM_TILE_SIZE),
@@ -239,15 +274,21 @@ ogre_run_frames = tuple(
     ).convert_alpha()
     for frame in range(4)
 )
-fireball_frames = tuple(
+
+masked_orc_run_frames = tuple(
     pygame.image.load(
-        str(Path("images/frames/fireball_12") / f"fireball_spritesheet{frame + 1}.png")
-    )
-    .convert_alpha()
-    .subsurface((frame * 32, 0, 32, 32))
-    .copy()
-    for frame in range(12)
+        str(Path("images/frames") / f"masked_orc_run_anim_f{frame}.png")
+    ).convert_alpha()
+    for frame in range(4)
 )
+
+orc_warrior_run_frames = tuple(
+    pygame.image.load(
+        str(Path("images/frames") / f"orc_warrior_run_anim_f{frame}.png")
+    ).convert_alpha()
+    for frame in range(4)
+)
+
 wizzard_frame = 0
 wizzard_animation_time = 0
 wizzard_x = 6.5 * ROOM_TILE_SIZE
@@ -269,10 +310,36 @@ OGRE_COLLISION_MASK = pygame.mask.Mask(
     (OGRE_COLLISION_WIDTH, OGRE_COLLISION_HEIGHT),
     fill=True,
 )
+ENEMY_TYPES = {
+    "ogre": {
+        "frames": ogre_run_frames,
+        "speed": 70,
+        "health": 1,
+    },
+    "masked_orc": {
+        "frames": masked_orc_run_frames,
+        "speed": 100,
+        "health": 1,
+    },
+    "orc_warrior": {
+        "frames": orc_warrior_run_frames,
+        "speed": 55,
+        "health": 1,
+    },
+}
 ogres = []
 particles = []
-ogre_spawn_timer = 0
-OGRE_SPAWN_INTERVAL = 1.2
+HORDE_START_SIZE = 6
+HORDE_SIZE_INCREMENT = 2
+
+HORDE_SPAWN_INTERVAL = 0.30
+HORDE_BREAK = 1.5
+
+horde_number = 1
+horde_queue = []
+horde_spawn_timer = 0
+horde_break_timer = 0
+horde_lane_index = 0
 ogres_defeated = 0
 health = 6
 damage_cooldown = 0
@@ -291,11 +358,15 @@ heart_images = {
         (26, 24),
     ),
 }
+skull_image = pygame.image.load("images/frames/skull.png").convert_alpha()
+
+skull_image = pygame.transform.scale(
+    skull_image,
+    (32, 32),
+)
 PROJECTILE_SPEED = 320
-PROJECTILE_RADIUS = 5
+PROJECTILE_RADIUS = 7
 PROJECTILE_INTERVAL = 0.25
-FIREBALL_FRAME_RATE = 16
-FIREBALL_HOLD_FRAME = 9
 projectiles = []
 projectile_timer = 0
 
@@ -367,16 +438,12 @@ def projectile_hits_ogre_swept(start_x, start_y, end_x, end_y, ogre):
         return False
 
     ogre_rect = pygame.Rect(
-        round(ogre["x"] - OGRE_COLLISION_WIDTH / 2),
-        round(ogre["y"] + OGRE_COLLISION_BOTTOM - OGRE_COLLISION_HEIGHT),
-        OGRE_COLLISION_WIDTH,
-        OGRE_COLLISION_HEIGHT,
+        round(ogre["x"] - 14),
+        round(ogre["y"] - 14),
+        28,
+        28,
     )
 
-    # Aumenta a hitbox somente para a detecção do projétil
-    ogre_rect.inflate_ip(PROJECTILE_RADIUS * 2, PROJECTILE_RADIUS * 2)
-
-    # Verifica todo o caminho percorrido pelo projétil
     return bool(
         ogre_rect.clipline(
             round(start_x),
@@ -403,40 +470,106 @@ def ogre_hits_wizzard(ogre):
     return ogre_rect.colliderect(wizzard_rect)
 
 
-def spawn_ogre():
-    side = random.choice(tuple(ROOM_OPENINGS))
-    opening = random.choice(ROOM_OPENINGS[side])
+SPAWN_LANES = (
+    ("top", 4),
+    ("top", 12),
+    ("bottom", 4),
+    ("bottom", 12),
+    ("left", 4),
+    ("left", 12),
+    ("right", 4),
+    ("right", 12),
+)
+
+
+def create_horde():
+    size = HORDE_START_SIZE + (horde_number - 1) * HORDE_SIZE_INCREMENT
+
+    if horde_number == 1:
+        enemy_queue = ["ogre"] * size
+
+    else:
+        masked_count = max(1, size // 3)
+        warrior_count = max(1, size // 6)
+        ogre_count = size - masked_count - warrior_count
+
+        enemy_queue = (
+            ["ogre"] * ogre_count
+            + ["masked_orc"] * masked_count
+            + ["orc_warrior"] * warrior_count
+        )
+
+    random.shuffle(enemy_queue)
+
+    return enemy_queue
+
+
+def start_horde():
+    global horde_queue
+    global horde_spawn_timer
+    global horde_break_timer
+
+    horde_queue = create_horde()
+    horde_spawn_timer = HORDE_SPAWN_INTERVAL
+    horde_break_timer = 0
+
+
+def spawn_ogre(enemy_type="ogre", lane=None):
+    if lane is None:
+        lane = random.choice(SPAWN_LANES)
+
+    side, opening = lane
     position = opening * ROOM_TILE_SIZE + ROOM_TILE_SIZE / 2
+
     if side == "top":
-        x, y, entry_target, facing_left = (
+        x, y = (
             position,
             -16,
-            (position, ROOM_TILE_SIZE * 1.5),
-            False,
         )
+        entry_target = (
+            position,
+            ROOM_TILE_SIZE * 1.5,
+        )
+        facing_left = False
+
     elif side == "bottom":
-        x, y, entry_target, facing_left = (
+        x, y = (
             position,
             room_rect.height + 16,
-            (position, room_rect.height - ROOM_TILE_SIZE * 1.5),
-            False,
         )
+        entry_target = (
+            position,
+            room_rect.height - ROOM_TILE_SIZE * 1.5,
+        )
+        facing_left = False
+
     elif side == "left":
-        x, y, entry_target, facing_left = (
+        x, y = (
             -16,
             position,
-            (ROOM_TILE_SIZE * 1.5, position),
-            False,
         )
+        entry_target = (
+            ROOM_TILE_SIZE * 1.5,
+            position,
+        )
+        facing_left = False
+
     else:
-        x, y, entry_target, facing_left = (
+        x, y = (
             room_rect.width + 16,
             position,
-            (room_rect.width - ROOM_TILE_SIZE * 1.5, position),
-            True,
         )
+        entry_target = (
+            room_rect.width - ROOM_TILE_SIZE * 1.5,
+            position,
+        )
+        facing_left = True
+
+    stats = ENEMY_TYPES[enemy_type]
+
     ogres.append(
         {
+            "type": enemy_type,
             "x": x,
             "y": y,
             "entry_target": entry_target,
@@ -444,6 +577,9 @@ def spawn_ogre():
             "frame": 0,
             "animation_time": random.random(),
             "facing_left": facing_left,
+            "speed": stats["speed"],
+            "health": stats["health"],
+            "frames": stats["frames"],
         }
     )
 
@@ -501,7 +637,9 @@ def draw_particles(surface):
 def reset_game():
     global game_state, wizzard_x, wizzard_y, wizzard_frame
     global wizzard_animation_time, wizzard_facing_left, projectile_timer
-    global ogre_spawn_timer, ogres_defeated, health, damage_cooldown, survival_time
+    global horde_number, horde_queue, horde_spawn_timer
+    global horde_break_timer, horde_lane_index
+    global ogres_defeated, health, damage_cooldown, survival_time
 
     ogres.clear()
     projectiles.clear()
@@ -514,14 +652,19 @@ def reset_game():
     wizzard_facing_left = False
 
     projectile_timer = 0
-    ogre_spawn_timer = 0
     ogres_defeated = 0
     health = 6
     damage_cooldown = 0
     survival_time = 0
 
-    spawn_ogre()
+    horde_number = 1
+    horde_queue = []
+    horde_spawn_timer = 0
+    horde_break_timer = 0
+    horde_lane_index = 0
+    start_horde()
     game_state = "game"
+    play_game_music()
 
 
 def create_projectile(mouse_position):
@@ -536,7 +679,6 @@ def create_projectile(mouse_position):
         {
             "position": pygame.Vector2(wizzard_x, wizzard_y),
             "direction": direction,
-            "animation_time": 0,
         }
     )
 
@@ -548,7 +690,6 @@ def update_projectiles(dt):
         # Guarda onde o projétil estava antes de se mover
         previous_position = projectile["position"].copy()
 
-        projectile["animation_time"] += dt
         projectile["position"] += projectile["direction"] * PROJECTILE_SPEED * dt
 
         position = projectile["position"]
@@ -578,12 +719,29 @@ def update_projectiles(dt):
 
 
 def update_ogres(dt):
-    global ogre_spawn_timer, health, damage_cooldown, game_state
+    global health, damage_cooldown, game_state
+    global horde_spawn_timer, horde_break_timer, horde_number, horde_lane_index
 
-    ogre_spawn_timer += dt
-    while ogre_spawn_timer >= OGRE_SPAWN_INTERVAL:
-        ogre_spawn_timer -= OGRE_SPAWN_INTERVAL
-        spawn_ogre()
+    horde_spawn_timer += dt
+
+    if horde_queue:
+        while horde_queue and horde_spawn_timer >= HORDE_SPAWN_INTERVAL:
+            horde_spawn_timer -= HORDE_SPAWN_INTERVAL
+
+            enemy_type = horde_queue.pop(0)
+
+            lane = SPAWN_LANES[horde_lane_index % len(SPAWN_LANES)]
+            horde_lane_index += 1
+
+            spawn_ogre(enemy_type, lane)
+
+    else:
+        horde_break_timer += dt
+
+        if horde_break_timer >= HORDE_BREAK:
+
+            horde_number += 1
+            start_horde()
 
     damage_cooldown = max(0, damage_cooldown - dt)
     for ogre in ogres:
@@ -592,36 +750,37 @@ def update_ogres(dt):
                 ogre["entry_target"][0] - ogre["x"],
                 ogre["entry_target"][1] - ogre["y"],
             )
-            if entry_direction.length() <= OGRE_SPEED * dt:
+            if entry_direction.length() <= ogre["speed"] * dt:
                 ogre["x"], ogre["y"] = ogre["entry_target"]
                 ogre["inside"] = True
             else:
                 entry_direction.normalize_ip()
-                ogre["x"] += entry_direction.x * OGRE_SPEED * dt
-                ogre["y"] += entry_direction.y * OGRE_SPEED * dt
+                ogre["x"] += entry_direction.x * ogre["speed"] * dt
+                ogre["y"] += entry_direction.y * ogre["speed"] * dt
                 ogre["facing_left"] = entry_direction.x < 0
             ogre["animation_time"] += dt
-            ogre["frame"] = int(ogre["animation_time"] * 6) % len(ogre_run_frames)
+            ogre["frame"] = int(ogre["animation_time"] * 6) % len(ogre["frames"])
             continue
 
         direction = pygame.Vector2(wizzard_x - ogre["x"], wizzard_y - ogre["y"])
         if direction.length_squared() > 0:
             direction.normalize_ip()
-            movement_x = direction.x * OGRE_SPEED * dt
-            movement_y = direction.y * OGRE_SPEED * dt
+            movement_x = direction.x * ogre["speed"] * dt
+            movement_y = direction.y * ogre["speed"] * dt
             if not ogre_collides(ogre, ogre["x"] + movement_x, ogre["y"]):
                 ogre["x"] += movement_x
             if not ogre_collides(ogre, ogre["x"], ogre["y"] + movement_y):
                 ogre["y"] += movement_y
             ogre["facing_left"] = direction.x < 0
         ogre["animation_time"] += dt
-        ogre["frame"] = int(ogre["animation_time"] * 6) % len(ogre_run_frames)
+        ogre["frame"] = int(ogre["animation_time"] * 6) % len(ogre["frames"])
 
         if damage_cooldown == 0 and ogre_hits_wizzard(ogre):
             health -= 1
             damage_cooldown = 0.8
             if health <= 0:
                 game_state = "game_over"
+                music.play(GAME_OVER_MUSIC)
                 return
 
 
@@ -720,7 +879,7 @@ def update(dt):
 
 
 def draw():
-    screen.fill(BACKGROUND_COLOR)
+    pygame.draw.rect(screen.surface, BACKGROUND_COLOR, (0, 0, WIDTH, HEIGHT))
     if game_state == "controls":
         draw_controls()
         return
@@ -731,10 +890,25 @@ def draw():
         draw_pause()
         return
     if game_state == "game":
+        pygame.draw.rect(
+            screen.surface,
+            GAME_BACKGROUND_COLOR,
+            (0, 0, WIDTH, HEIGHT),
+        )
         draw_game()
         return
 
-    screen.blit(panel, panel_position)
+    screen.draw.text(
+        "Dungeon Survival",
+        center=(WIDTH // 2, 55),
+        fontname="monogram",
+        fontsize=52,
+        color=TEXT_COLOR,
+        owidth=2,
+        ocolor=OUTLINE_COLOR,
+    )
+
+    screen.surface.blit(panel, panel_position)
 
     for label, button in button_positions.items():
         color = HOVER_COLOR if label == hovered_button else TEXT_COLOR
@@ -753,7 +927,7 @@ def draw():
 
     if game_state == "menu":
         music_frame = 1 if music_muted else 0
-        screen.blit(music_button_frames[music_frame], music_button_rect.topleft)
+        screen.surface.blit(music_button_frames[music_frame], music_button_rect.topleft)
 
 
 def draw_game():
@@ -761,8 +935,10 @@ def draw_game():
 
     for row in range(ROOM_ROWS):
         for column in range(ROOM_COLUMNS):
+            tile_index = floor_layout[row][column]
+
             room_surface.blit(
-                floor_tile,
+                floor_tiles[tile_index],
                 (column * ROOM_TILE_SIZE, row * ROOM_TILE_SIZE),
             )
 
@@ -815,7 +991,7 @@ def draw_game():
         if not ogre["inside"]:
             continue
 
-        ogre_image = ogre_run_frames[ogre["frame"]]
+        ogre_image = ogre["frames"][ogre["frame"]]
 
         if ogre["facing_left"]:
             ogre_image = pygame.transform.flip(
@@ -863,7 +1039,7 @@ def draw_game():
             wizzard_position,
         )
 
-    screen.blit(
+    screen.surface.blit(
         room_surface,
         room_rect.topleft,
     )
@@ -874,17 +1050,40 @@ def draw_game():
 def draw_projectiles(surface):
     for projectile in projectiles:
         position = projectile["position"]
-        frame = min(
-            int(projectile["animation_time"] * FIREBALL_FRAME_RATE),
-            FIREBALL_HOLD_FRAME,
+
+        x = round(position.x)
+        y = round(position.y)
+
+        # Sombra
+        pygame.draw.circle(
+            surface,
+            (70, 35, 25),
+            (x + 2, y + 3),
+            PROJECTILE_RADIUS,
         )
-        image = fireball_frames[frame]
-        surface.blit(
-            image,
-            (
-                round(position.x - image.get_width() / 2),
-                round(position.y - image.get_height() / 2),
-            ),
+
+        # Borda
+        pygame.draw.circle(
+            surface,
+            (120, 35, 20),
+            (x, y),
+            PROJECTILE_RADIUS,
+        )
+
+        # Corpo
+        pygame.draw.circle(
+            surface,
+            (255, 90, 25),
+            (x, y),
+            PROJECTILE_RADIUS - 2,
+        )
+
+        # Núcleo luminoso
+        pygame.draw.circle(
+            surface,
+            (255, 170, 60),
+            (x - 1, y - 1),
+            2,
         )
 
 
@@ -910,10 +1109,13 @@ def draw_hud():
         heart = heart_images[
             6 if remaining_health >= 2 else 3 if remaining_health == 1 else 0
         ]
-        screen.blit(heart, (20 + heart_number * 30, 20))
+        screen.surface.blit(heart, (20 + heart_number * 30, 20))
+
+    screen.blit(skull_image, (18, 49))
+
     screen.draw.text(
-        f"OGROS: {ogres_defeated}",
-        (20, 52),
+        str(ogres_defeated),
+        (56, 52),
         fontname="monogram",
         fontsize=24,
         color=TEXT_COLOR,
@@ -924,6 +1126,9 @@ def draw_hud():
 
 def draw_game_over():
     center_x = WIDTH // 2
+
+    screen.blit(game_over_background, (0, 0))
+    screen.blit(game_over_overlay, (0, 0))
 
     screen.draw.text(
         "Game over :(",
@@ -944,7 +1149,7 @@ def draw_game_over():
     )
 
     screen.draw.text(
-        f"OGROS MORTOS: {ogres_defeated}",
+        f"INIMIGOS: {ogres_defeated}",
         center=(center_x, 315),
         fontname="monogram",
         fontsize=30,
@@ -1006,11 +1211,11 @@ def draw_game_over_hover_arrows(button):
     )
 
     for position, image in positions:
-        screen.blit(image, position)
+        screen.surface.blit(image, position)
 
 
 def draw_pause():
-    screen.blit(panel, panel_position)
+    screen.surface.blit(panel, panel_position)
     screen.draw.text(
         "PAUSADO",
         center=(WIDTH // 2, panel_inner_screen.top + 34),
@@ -1033,7 +1238,9 @@ def draw_pause():
         )
         if label == hovered_button:
             draw_hover_arrows(button)
-    screen.blit(music_button_frames[1 if music_muted else 0], music_button_rect.topleft)
+    screen.surface.blit(
+        music_button_frames[1 if music_muted else 0], music_button_rect.topleft
+    )
 
 
 def format_survival_time():
@@ -1060,7 +1267,7 @@ def draw_repeated_wall(surface, image, x, y, vertical=False):
 
 
 def draw_controls():
-    screen.blit(paper_panel, ((WIDTH - paper_panel.get_width()) // 2, 40))
+    screen.surface.blit(paper_panel, ((WIDTH - paper_panel.get_width()) // 2, 40))
     screen.draw.text(
         "COMO JOGAR",
         center=(WIDTH // 2, 154),
@@ -1075,10 +1282,10 @@ def draw_controls():
         draw_control_line(text, controls_start_y + line_number * controls_line_gap)
 
     frame = 1 if x_button_pressed else 0
-    screen.blit(x_button_frames[frame], x_button_rect.topleft)
+    screen.surface.blit(x_button_frames[frame], x_button_rect.topleft)
     if controls_fade:
         fade_surface.fill((0, 0, 0, round(255 * controls_fade)))
-        screen.blit(fade_surface, (0, 0))
+        screen.surface.blit(fade_surface, (0, 0))
 
 
 def draw_control_line(text, y):
@@ -1097,7 +1304,7 @@ def draw_control_line(text, y):
     for segment, color in segments:
         segment_width = controls_text_font.size(segment)[0]
         segment_surface = controls_text_font.render(segment, True, color)
-        screen.blit(
+        screen.surface.blit(
             segment_surface,
             (segment_left, y - segment_surface.get_height() / 2),
         )
@@ -1114,7 +1321,7 @@ def draw_hover_arrows(button):
     )
 
     for position, image in positions:
-        screen.blit(image, position)
+        screen.surface.blit(image, position)
 
 
 def on_mouse_move(pos):
@@ -1149,6 +1356,7 @@ def on_mouse_down(pos, button):
         elif game_over_button_positions["MENU"].collidepoint(pos):
             click_sound.play()
             game_state = "menu"
+            music.play(MENU_MUSIC)
         return
 
     if game_state == "paused":
@@ -1163,6 +1371,7 @@ def on_mouse_down(pos, button):
         elif pause_button_positions["SAIR"].collidepoint(pos):
             click_sound.play()
             game_state = "menu"
+            music.play(MENU_MUSIC)
         return
 
     if game_state == "controls":
@@ -1205,4 +1414,4 @@ def on_key_down(key):
             game_state = "game"
 
 
-music.play("jardins")
+music.play(MENU_MUSIC)
