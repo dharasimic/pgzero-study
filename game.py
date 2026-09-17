@@ -1357,7 +1357,8 @@ def on_mouse_down(pos, button):
 
     elif button_positions["SAIR"].collidepoint(pos):
         click_sound.play()
-        quit()
+        pygame.quit()
+        sys.exit()
 
 
 def on_key_down(key):
