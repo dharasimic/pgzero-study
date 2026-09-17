@@ -1,5 +1,6 @@
-import re
 import random
+import os
+import sys
 from pathlib import Path
 
 from pgzero import music
@@ -8,43 +9,39 @@ import pygame
 WIDTH = 800
 HEIGHT = 600
 
+if getattr(sys, "frozen", False):
+    os.chdir(sys._MEIPASS)
+
+pygame.init()
+pygame.display.set_mode((WIDTH, HEIGHT))
+
 BACKGROUND_COLOR = (35, 45, 42)
 GAME_BACKGROUND_COLOR = (5, 5, 8)
-TEXT_COLOR = (226, 190, 132)
-HOVER_COLOR = (247, 218, 166)
+TEXT_COLOR = (240, 238, 225)
+HOVER_COLOR = (255, 253, 240)
 OUTLINE_COLOR = (61, 39, 27)
 
 ui_atlas = pygame.image.load("images/MediavelUI.png").convert_alpha()
-books_atlas = pygame.image.load("images/UI books & more.png").convert_alpha()
-floor_atlas = pygame.image.load("images/atlas_floor-16x16.png").convert_alpha()
 walls_atlas = pygame.image.load("images/atlas_walls_low-16x16.png").convert_alpha()
-game_over_background = pygame.image.load("images/background.jpg").convert()
-game_over_background = pygame.transform.scale(
-    game_over_background,
-    (1063, 600),
+menu_background = pygame.image.load("images/menu_background.jpg").convert()
+
+menu_background = pygame.transform.scale(
+    menu_background,
+    (WIDTH, HEIGHT),
 )
 
-game_over_background = game_over_background.subsurface(
-    pygame.Rect(131, 0, WIDTH, HEIGHT)
-)
 game_over_overlay = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
 game_over_overlay.fill((0, 0, 0, 150))
 click_sound = pygame.mixer.Sound("sounds/SFX/sfx_pressure_key_tp.mp3")
 panel_source = ui_atlas.subsurface((0, 0, 80, 96))
 panel = pygame.transform.scale(panel_source, (400, 480))
-x_button_frames = tuple(
-    pygame.transform.scale(ui_atlas.subsurface((80 + frame * 16, 32, 16, 16)), (40, 40))
-    for frame in range(2)
-)
 music_button_frames = tuple(
     pygame.transform.scale(
         ui_atlas.subsurface((240, 80 + frame * 16, 16, 16)), (40, 40)
     )
     for frame in range(2)
 )
-paper_source = books_atlas.subsurface((608, 16, 48, 64))
-paper_panel = pygame.transform.scale(paper_source, (720, 520))
-fade_surface = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
+
 arrow_frames = tuple(
     tuple(
         pygame.transform.scale(
@@ -78,21 +75,19 @@ panel_inner_screen = pygame.Rect(
 )
 button_width = 220
 button_height = 48
-button_left = panel_inner_screen.left + (panel_inner_screen.width - button_width) // 2
-button_gap = 16
-button_group_height = button_height * 3 + button_gap * 2
-button_top = (
-    panel_inner_screen.top + (panel_inner_screen.height - button_group_height) // 2
-)
+
 button_positions = {
-    "JOGAR": pygame.Rect((button_left, button_top), (button_width, button_height)),
-    "COMO JOGAR": pygame.Rect(
-        (button_left, button_top + button_height + button_gap),
-        (button_width, button_height),
+    "JOGAR": pygame.Rect(
+        (WIDTH - button_width) // 2,
+        268,
+        button_width,
+        button_height,
     ),
     "SAIR": pygame.Rect(
-        (button_left, button_top + (button_height + button_gap) * 2),
-        (button_width, button_height),
+        (WIDTH - button_width) // 2,
+        316,
+        button_width,
+        button_height,
     ),
 }
 game_over_button_positions = {
@@ -109,17 +104,64 @@ game_over_button_positions = {
         button_height,
     ),
 }
+pause_panel_position = (
+    (WIDTH - panel.get_width()) // 2,
+    (HEIGHT - panel.get_height()) // 2,
+)
+
+pause_panel_inner = pygame.Rect(
+    13,
+    31,
+    54,
+    53,
+)
+
+pause_panel_scale_x = panel.get_width() / panel_source.get_width()
+pause_panel_scale_y = panel.get_height() / panel_source.get_height()
+
+pause_panel_inner_screen = pygame.Rect(
+    pause_panel_position[0] + round(pause_panel_inner.x * pause_panel_scale_x),
+    pause_panel_position[1] + round(pause_panel_inner.y * pause_panel_scale_y),
+    round(pause_panel_inner.width * pause_panel_scale_x),
+    round(pause_panel_inner.height * pause_panel_scale_y),
+)
+
+pause_button_width = 220
+pause_button_height = 48
+pause_button_gap = 16
+
+pause_button_left = (
+    pause_panel_inner_screen.left
+    + (pause_panel_inner_screen.width - pause_button_width) // 2
+)
+
 pause_button_positions = {
-    "COMO JOGAR": button_positions["COMO JOGAR"],
-    "SAIR": button_positions["SAIR"],
+    "CONTINUAR": pygame.Rect(
+        pause_button_left,
+        pause_panel_inner_screen.centery
+        - pause_button_height
+        - pause_button_gap // 2
+        + 15,
+        pause_button_width,
+        pause_button_height,
+    ),
+    "SAIR": pygame.Rect(
+        pause_button_left,
+        pause_panel_inner_screen.centery + pause_button_gap // 2,
+        pause_button_width,
+        pause_button_height,
+    ),
 }
+
+pause_overlay = pygame.Surface(
+    (WIDTH, HEIGHT),
+    pygame.SRCALPHA,
+)
+pause_overlay.fill((0, 0, 0, 150))
 
 hovered_button = None
 hover_animation_time = 0
 game_state = "menu"
-previous_state = "menu"
-controls_fade = 1.0
-x_button_pressed = 0
 music_muted = False
 MENU_MUSIC = "mystery"
 GAME_MUSIC_1 = "haunted"
@@ -135,22 +177,6 @@ def play_game_music():
 GAME_OVER_TEXT = "VOCE MORREU!"
 PULSE_FRAMES = (0, 1, 2, 3, 2, 1)
 
-controls_lines = (
-    "USE W A S D PARA MOVER O PERSONAGEM",
-    "USE O CURSOR DO MOUSE PARA MIRAR",
-    "A BRUXINHA ATIRA AUTOMATICAMENTE NA DIRECAO DO CURSOR",
-    "APERTE F PARA INTERAGIR COM BAUS",
-    "PASSE POR CIMA DE BOTOES PARA ATIVA-LOS",
-    "COLIDIR COM INIMIGOS FAZ VOCE PERDER VIDA",
-    "PERCA AS TRES VIDAS E O JOGO ACABA",
-    "APERTE ESC PARA PAUSAR",
-)
-controls_fontsize = 26
-controls_start_y = 214
-controls_line_gap = 40
-controls_key_color = (156, 91, 42)
-controls_text_font = pygame.font.Font("fonts/monogram.ttf", controls_fontsize)
-x_button_rect = pygame.Rect(20, 20, 40, 40)
 music_button_rect = pygame.Rect(WIDTH - 60, HEIGHT - 60, 40, 40)
 
 ROOM_TILE_SIZE = 32
@@ -255,7 +281,7 @@ wizzard_idle_frames = tuple(
         pygame.image.load(
             str(Path("images/frames") / f"wizzard_f_idle_anim_f{frame}.png")
         ).convert_alpha(),
-        (32, 56),
+        (24, 42),
     )
     for frame in range(4)
 )
@@ -264,7 +290,7 @@ wizzard_run_frames = tuple(
         pygame.image.load(
             str(Path("images/frames") / f"wizzard_f_run_anim_f{frame}.png")
         ).convert_alpha(),
-        (32, 56),
+        (24, 42),
     )
     for frame in range(4)
 )
@@ -302,7 +328,7 @@ WIZZARD_COLLISION_MASK = pygame.mask.Mask(
     (WIZZARD_COLLISION_WIDTH, WIZZARD_COLLISION_HEIGHT),
     fill=True,
 )
-OGRE_SPEED = 70
+
 OGRE_COLLISION_WIDTH = 12
 OGRE_COLLISION_HEIGHT = 8
 OGRE_COLLISION_BOTTOM = 28
@@ -313,17 +339,17 @@ OGRE_COLLISION_MASK = pygame.mask.Mask(
 ENEMY_TYPES = {
     "ogre": {
         "frames": ogre_run_frames,
-        "speed": 70,
-        "health": 1,
+        "speed": 40,
+        "health": 2,
     },
     "masked_orc": {
         "frames": masked_orc_run_frames,
-        "speed": 100,
+        "speed": 80,
         "health": 1,
     },
     "orc_warrior": {
         "frames": orc_warrior_run_frames,
-        "speed": 55,
+        "speed": 100,
         "health": 1,
     },
 }
@@ -362,10 +388,10 @@ skull_image = pygame.image.load("images/frames/skull.png").convert_alpha()
 
 skull_image = pygame.transform.scale(
     skull_image,
-    (32, 32),
+    (42, 42),
 )
 PROJECTILE_SPEED = 320
-PROJECTILE_RADIUS = 7
+PROJECTILE_RADIUS = 5
 PROJECTILE_INTERVAL = 0.25
 projectiles = []
 projectile_timer = 0
@@ -409,28 +435,6 @@ def projectile_hits_wall(x, y):
         ):
             return True
     return False
-
-
-def projectile_hits_ogre(x, y):
-    return any(projectile_hits_ogre_in_enemy(x, y, ogre) for ogre in ogres)
-
-
-def projectile_hits_ogre_in_enemy(x, y, ogre):
-    if not ogre["inside"]:
-        return False
-    projectile_rect = pygame.Rect(
-        round(x - PROJECTILE_RADIUS),
-        round(y - PROJECTILE_RADIUS),
-        PROJECTILE_RADIUS * 2,
-        PROJECTILE_RADIUS * 2,
-    )
-    ogre_rect = pygame.Rect(
-        round(ogre["x"] - OGRE_COLLISION_WIDTH / 2),
-        round(ogre["y"] + OGRE_COLLISION_BOTTOM - OGRE_COLLISION_HEIGHT),
-        OGRE_COLLISION_WIDTH,
-        OGRE_COLLISION_HEIGHT,
-    )
-    return projectile_rect.colliderect(ogre_rect)
 
 
 def projectile_hits_ogre_swept(start_x, start_y, end_x, end_y, ogre):
@@ -785,8 +789,7 @@ def update_ogres(dt):
 
 
 def update(dt):
-    global hover_animation_time, controls_fade, x_button_pressed, game_state
-    global previous_state
+    global hover_animation_time, game_state
     global wizzard_frame, wizzard_animation_time, wizzard_x, wizzard_y
     global wizzard_facing_left, projectile_timer
     global survival_time
@@ -838,8 +841,6 @@ def update(dt):
 
         wizzard_frame = int(wizzard_animation_time * 6) % len(animation_frames)
 
-        wizzard_image = animation_frames[wizzard_frame]
-
         wizzard_x = max(
             WIZZARD_COLLISION_WIDTH / 2,
             wizzard_x,
@@ -862,56 +863,53 @@ def update(dt):
 
         update_ogres(dt)
 
-    if game_state == "controls":
-        controls_fade = max(
-            0.0,
-            controls_fade - dt / 0.18,
-        )
-
-        if x_button_pressed:
-            x_button_pressed = max(
-                0.0,
-                x_button_pressed - dt,
-            )
-
-            if x_button_pressed == 0:
-                game_state = previous_state
-
 
 def draw():
-    pygame.draw.rect(screen.surface, BACKGROUND_COLOR, (0, 0, WIDTH, HEIGHT))
-    if game_state == "controls":
-        draw_controls()
-        return
+    pygame.draw.rect(
+        screen.surface,
+        BACKGROUND_COLOR,
+        (0, 0, WIDTH, HEIGHT),
+    )
+
     if game_state == "game_over":
         draw_game_over()
         return
-    if game_state == "paused":
-        draw_pause()
-        return
-    if game_state == "game":
+
+    if game_state == "game" or game_state == "paused":
         pygame.draw.rect(
             screen.surface,
             GAME_BACKGROUND_COLOR,
             (0, 0, WIDTH, HEIGHT),
         )
+
         draw_game()
+
+        if game_state == "paused":
+            draw_pause()
+
+            music_frame = 1 if music_muted else 0
+            screen.surface.blit(
+                music_button_frames[music_frame],
+                music_button_rect.topleft,
+            )
+
         return
+
+    screen.surface.blit(menu_background, (0, 0))
 
     screen.draw.text(
         "Dungeon Survival",
-        center=(WIDTH // 2, 55),
+        center=(WIDTH // 2, 150),
         fontname="monogram",
-        fontsize=52,
+        fontsize=68,
         color=TEXT_COLOR,
         owidth=2,
         ocolor=OUTLINE_COLOR,
     )
 
-    screen.surface.blit(panel, panel_position)
-
     for label, button in button_positions.items():
         color = HOVER_COLOR if label == hovered_button else TEXT_COLOR
+
         screen.draw.text(
             label,
             center=button.center,
@@ -925,9 +923,12 @@ def draw():
         if label == hovered_button:
             draw_hover_arrows(button)
 
-    if game_state == "menu":
+    if game_state in ("menu", "paused"):
         music_frame = 1 if music_muted else 0
-        screen.surface.blit(music_button_frames[music_frame], music_button_rect.topleft)
+        screen.surface.blit(
+            music_button_frames[music_frame],
+            music_button_rect.topleft,
+        )
 
 
 def draw_game():
@@ -1115,7 +1116,7 @@ def draw_hud():
 
     screen.draw.text(
         str(ogres_defeated),
-        (56, 52),
+        midleft=(52, 74),
         fontname="monogram",
         fontsize=24,
         color=TEXT_COLOR,
@@ -1127,11 +1128,14 @@ def draw_hud():
 def draw_game_over():
     center_x = WIDTH // 2
 
-    screen.blit(game_over_background, (0, 0))
+    screen.surface.blit(
+        menu_background,
+        (0, 0),
+    )
     screen.blit(game_over_overlay, (0, 0))
 
     screen.draw.text(
-        "Game over :(",
+        GAME_OVER_TEXT,
         center=(center_x, 180),
         fontname="monogram",
         fontsize=58,
@@ -1215,100 +1219,57 @@ def draw_game_over_hover_arrows(button):
 
 
 def draw_pause():
-    screen.surface.blit(panel, panel_position)
+    screen.surface.blit(
+        panel,
+        pause_panel_position,
+    )
+
+    center_x = pause_panel_inner_screen.centerx
+
+    # Título
     screen.draw.text(
-        "PAUSADO",
-        center=(WIDTH // 2, panel_inner_screen.top + 34),
+        "Pausado",
+        center=(center_x, pause_panel_inner_screen.top + 65),
+        fontname="monogram",
+        fontsize=52,
+        color=TEXT_COLOR,
+        owidth=2,
+        ocolor=OUTLINE_COLOR,
+    )
+
+    # Botão CONTINUAR
+    screen.draw.text(
+        "CONTINUAR",
+        center=pause_button_positions["CONTINUAR"].center,
         fontname="monogram",
         fontsize=38,
-        color=TEXT_COLOR,
+        color=(HOVER_COLOR if hovered_button == "CONTINUAR" else TEXT_COLOR),
         owidth=1,
         ocolor=OUTLINE_COLOR,
     )
-    for label, button in pause_button_positions.items():
-        color = HOVER_COLOR if label == hovered_button else TEXT_COLOR
-        screen.draw.text(
-            label,
-            center=button.center,
-            fontname="monogram",
-            fontsize=38,
-            color=color,
-            owidth=1,
-            ocolor=OUTLINE_COLOR,
-        )
-        if label == hovered_button:
-            draw_hover_arrows(button)
-    screen.surface.blit(
-        music_button_frames[1 if music_muted else 0], music_button_rect.topleft
+
+    if hovered_button == "CONTINUAR":
+        draw_hover_arrows(pause_button_positions["CONTINUAR"])
+
+    # Botão SAIR
+    screen.draw.text(
+        "SAIR",
+        center=pause_button_positions["SAIR"].center,
+        fontname="monogram",
+        fontsize=38,
+        color=(HOVER_COLOR if hovered_button == "SAIR" else TEXT_COLOR),
+        owidth=1,
+        ocolor=OUTLINE_COLOR,
     )
+
+    if hovered_button == "SAIR":
+        draw_hover_arrows(pause_button_positions["SAIR"])
 
 
 def format_survival_time():
     minutes = int(survival_time) // 60
     seconds = int(survival_time) % 60
     return f"{minutes:02d}:{seconds:02d}"
-
-
-def draw_repeated_wall(surface, image, x, y, vertical=False):
-    if image.get_width() > surface.get_width() - x:
-        return
-    if image.get_height() > surface.get_height() - y:
-        return
-    if vertical:
-        for position_y in range(
-            y, surface.get_height() - ROOM_TILE_SIZE, image.get_height()
-        ):
-            surface.blit(image, (x, position_y))
-    else:
-        for position_x in range(
-            x, surface.get_width() - ROOM_TILE_SIZE, image.get_width()
-        ):
-            surface.blit(image, (position_x, y))
-
-
-def draw_controls():
-    screen.surface.blit(paper_panel, ((WIDTH - paper_panel.get_width()) // 2, 40))
-    screen.draw.text(
-        "COMO JOGAR",
-        center=(WIDTH // 2, 154),
-        fontname="monogram",
-        fontsize=42,
-        color=OUTLINE_COLOR,
-        owidth=1,
-        ocolor=TEXT_COLOR,
-    )
-
-    for line_number, text in enumerate(controls_lines):
-        draw_control_line(text, controls_start_y + line_number * controls_line_gap)
-
-    frame = 1 if x_button_pressed else 0
-    screen.surface.blit(x_button_frames[frame], x_button_rect.topleft)
-    if controls_fade:
-        fade_surface.fill((0, 0, 0, round(255 * controls_fade)))
-        screen.surface.blit(fade_surface, (0, 0))
-
-
-def draw_control_line(text, y):
-    segments = []
-    last_token_end = 0
-    for token_match in re.finditer(r"\b(?:W|A|S|D|F|ESC)\b", text):
-        if token_match.start() > last_token_end:
-            segments.append((text[last_token_end : token_match.start()], OUTLINE_COLOR))
-        segments.append((token_match.group(), controls_key_color))
-        last_token_end = token_match.end()
-    if last_token_end < len(text):
-        segments.append((text[last_token_end:], OUTLINE_COLOR))
-
-    total_width = sum(controls_text_font.size(segment)[0] for segment, _ in segments)
-    segment_left = (WIDTH - total_width) / 2
-    for segment, color in segments:
-        segment_width = controls_text_font.size(segment)[0]
-        segment_surface = controls_text_font.render(segment, True, color)
-        screen.surface.blit(
-            segment_surface,
-            (segment_left, y - segment_surface.get_height() / 2),
-        )
-        segment_left += segment_width
 
 
 def draw_hover_arrows(button):
@@ -1344,7 +1305,7 @@ def on_mouse_move(pos):
 
 
 def on_mouse_down(pos, button):
-    global game_state, controls_fade, x_button_pressed, music_muted, previous_state
+    global game_state, music_muted
 
     if game_state == "game":
         return
@@ -1353,10 +1314,12 @@ def on_mouse_down(pos, button):
         if game_over_button_positions["JOGAR NOVAMENTE"].collidepoint(pos):
             click_sound.play()
             reset_game()
+
         elif game_over_button_positions["MENU"].collidepoint(pos):
             click_sound.play()
             game_state = "menu"
             music.play(MENU_MUSIC)
+
         return
 
     if game_state == "paused":
@@ -1364,20 +1327,18 @@ def on_mouse_down(pos, button):
             click_sound.play()
             music_muted = not music_muted
             music.set_volume(0 if music_muted else 1)
-        elif pause_button_positions["COMO JOGAR"].collidepoint(pos):
-            previous_state = "paused"
-            game_state = "controls"
-            controls_fade = 1.0
+
+        elif pause_button_positions["CONTINUAR"].collidepoint(pos):
+            click_sound.play()
+            game_state = "game"
+            hovered_button = None
+
         elif pause_button_positions["SAIR"].collidepoint(pos):
             click_sound.play()
             game_state = "menu"
             music.play(MENU_MUSIC)
-        return
+            hovered_button = None
 
-    if game_state == "controls":
-        if x_button_rect.collidepoint(pos):
-            click_sound.play()
-            x_button_pressed = 0.08
         return
 
     if game_state != "menu":
@@ -1389,18 +1350,13 @@ def on_mouse_down(pos, button):
         music.set_volume(0 if music_muted else 1)
         return
 
-    if any(button.collidepoint(pos) for button in button_positions.values()):
+    if button_positions["JOGAR"].collidepoint(pos):
         click_sound.play()
-
-    if button_positions["COMO JOGAR"].collidepoint(pos):
-        previous_state = "menu"
-        game_state = "controls"
-        controls_fade = 1.0
-        hovered_button = None
-    elif button_positions["JOGAR"].collidepoint(pos):
         reset_game()
         hovered_button = None
+
     elif button_positions["SAIR"].collidepoint(pos):
+        click_sound.play()
         quit()
 
 
@@ -1415,3 +1371,7 @@ def on_key_down(key):
 
 
 music.play(MENU_MUSIC)
+
+import pgzrun
+
+pgzrun.go()

@@ -2,7 +2,7 @@
 # 09/09/2026
 
 - Defini o conceito e o escopo da primeira entrega do minigame **Dungeon Survival** em Pygame Zero.
-- Documentei o design, as regras, o loop de jogo, os estados, a progressao, o audio, os criterios de aceite e os itens fora do escopo em `MANUAL.md`.
+- Documentei o design, as regras, o loop de jogo, os estados, a progressao, o audio, os criterios de aceite e os itens fora do escopo em um documento.
 - Atualizei o `README.md` com a proposta, a estrutura do projeto e as instrucoes de execucao.
 - Preparei o ponto de entrada `game.py` e a dependencia `pgzero`.
 - Organizei os assets de dungeon, personagens, inimigos, itens, portas e efeitos em `images/`, alem das musicas e efeitos sonoros em `sounds/`.
@@ -39,3 +39,8 @@
 - Começei limpando as pastas do projeto removendo os assets que eu não usei ou não pretendo usar
 - Adicionei mais dois inimigos que são mais rapidos que os ogros
 - Troquei a música que toca durante o jogo e adicionei ost diferentes para cada parte do jogo
+- Consegui compilar o jogo em um exe para enviar para amigos para perguntar o que eles acham que eu posso melhorar
+- Refinei a tela de menu, incluindo um fundo e o nome do jogo
+- Mudei a tela de pausa para que seja mais organizada
+- Limpei o código, tirando coisas que criei mas não iria usar mais
+- Arrumei o readme para que tivesse de acordo com o meu projeto
