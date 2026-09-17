@@ -10,7 +10,7 @@ A partida termina quando toda a vida do jogador é perdida.
 
 Se você só quer experimentar o jogo sem precisar configurar o ambiente Python ou baixar o código-fonte, é possível baixar diretamente a versão executável:
 
-**[⬇️ Baixar Dungeon Survival (.exe)]()**
+**[⬇️ Baixar Dungeon Survival (.exe)](https://github.com/dharasimic/pgzero-study/releases/tag/v1.0)**
 
 ## 🕹️ Como jogar
 
