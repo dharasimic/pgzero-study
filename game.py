@@ -339,8 +339,8 @@ OGRE_COLLISION_MASK = pygame.mask.Mask(
 ENEMY_TYPES = {
     "ogre": {
         "frames": ogre_run_frames,
-        "speed": 40,
-        "health": 2,
+        "speed": 30,
+        "health": 1,
     },
     "masked_orc": {
         "frames": masked_orc_run_frames,
@@ -691,7 +691,6 @@ def update_projectiles(dt):
     global ogres_defeated
 
     for projectile in projectiles[:]:
-        # Guarda onde o projétil estava antes de se mover
         previous_position = projectile["position"].copy()
 
         projectile["position"] += projectile["direction"] * PROJECTILE_SPEED * dt
@@ -943,7 +942,6 @@ def draw_game():
                 (column * ROOM_TILE_SIZE, row * ROOM_TILE_SIZE),
             )
 
-    # Paredes
     room_surface.blit(wall_top_left, (0, 0))
     room_surface.blit(
         wall_top_right,
@@ -984,10 +982,8 @@ def draw_game():
         vertical=True,
     )
 
-    # Projéteis
     draw_projectiles(room_surface)
 
-    # Ogros
     for ogre in ogres:
         if not ogre["inside"]:
             continue
@@ -1011,10 +1007,8 @@ def draw_game():
             ogre_position,
         )
 
-    # Partículas
     draw_particles(room_surface)
 
-    # Bruxinha
     is_moving = keyboard.w or keyboard.s or keyboard.a or keyboard.d
 
     animation_frames = wizzard_run_frames if is_moving else wizzard_idle_frames
@@ -1033,7 +1027,6 @@ def draw_game():
         wizzard_y - wizzard_image.get_height() // 2,
     )
 
-    # Pisca durante a invencibilidade após tomar dano
     if damage_cooldown <= 0 or int(damage_cooldown * 12) % 2 == 0:
         room_surface.blit(
             wizzard_image,
@@ -1055,7 +1048,6 @@ def draw_projectiles(surface):
         x = round(position.x)
         y = round(position.y)
 
-        # Sombra
         pygame.draw.circle(
             surface,
             (70, 35, 25),
@@ -1063,7 +1055,6 @@ def draw_projectiles(surface):
             PROJECTILE_RADIUS,
         )
 
-        # Borda
         pygame.draw.circle(
             surface,
             (120, 35, 20),
@@ -1071,7 +1062,6 @@ def draw_projectiles(surface):
             PROJECTILE_RADIUS,
         )
 
-        # Corpo
         pygame.draw.circle(
             surface,
             (255, 90, 25),
@@ -1079,7 +1069,6 @@ def draw_projectiles(surface):
             PROJECTILE_RADIUS - 2,
         )
 
-        # Núcleo luminoso
         pygame.draw.circle(
             surface,
             (255, 170, 60),
@@ -1226,7 +1215,6 @@ def draw_pause():
 
     center_x = pause_panel_inner_screen.centerx
 
-    # Título
     screen.draw.text(
         "Pausado",
         center=(center_x, pause_panel_inner_screen.top + 65),
@@ -1237,7 +1225,6 @@ def draw_pause():
         ocolor=OUTLINE_COLOR,
     )
 
-    # Botão CONTINUAR
     screen.draw.text(
         "CONTINUAR",
         center=pause_button_positions["CONTINUAR"].center,
@@ -1251,7 +1238,6 @@ def draw_pause():
     if hovered_button == "CONTINUAR":
         draw_hover_arrows(pause_button_positions["CONTINUAR"])
 
-    # Botão SAIR
     screen.draw.text(
         "SAIR",
         center=pause_button_positions["SAIR"].center,

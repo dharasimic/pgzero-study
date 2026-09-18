@@ -34,7 +34,7 @@ O jogo possui três tipos de inimigos:
 
 | Inimigo       | Velocidade | Vida |
 | ------------- | ---------: | ---: |
-| Ogro          |         40 |    2 |
+| Ogro          |         30 |    1 |
 | Orc mascarado |         80 |    1 |
 | Orc guerreiro |        100 |    1 |
 
